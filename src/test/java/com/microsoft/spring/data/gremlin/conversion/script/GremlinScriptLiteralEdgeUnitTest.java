@@ -10,6 +10,8 @@ import com.microsoft.spring.data.gremlin.common.domain.Project;
 import com.microsoft.spring.data.gremlin.common.domain.Relationship;
 import com.microsoft.spring.data.gremlin.conversion.MappingGremlinConverter;
 import com.microsoft.spring.data.gremlin.conversion.source.GremlinSource;
+import com.microsoft.spring.data.gremlin.conversion.source.GremlinSourceVertex;
+import com.microsoft.spring.data.gremlin.exception.GremlinUnexpectedSourceTypeException;
 import com.microsoft.spring.data.gremlin.mapping.GremlinMappingContext;
 import com.microsoft.spring.data.gremlin.repository.support.GremlinEntityInformation;
 import org.junit.Before;
@@ -41,9 +43,9 @@ public class GremlinScriptLiteralEdgeUnitTest {
         this.mappingContext.getPersistentEntity(Person.class);
         this.converter = new MappingGremlinConverter(this.mappingContext);
 
-        final Relationship relationship = new Relationship("456", "rel-name", null,
+        final Relationship relationship = new Relationship("456", "rel-name", "china",
                 new Person("123", "bill"), // from
-                new Project("321", "ms-project", null) // to
+                new Project("321", "ms-project", "http") // to
         );
         @SuppressWarnings("unchecked") final GremlinEntityInformation info =
                 new GremlinEntityInformation(Relationship.class);
@@ -72,14 +74,15 @@ public class GremlinScriptLiteralEdgeUnitTest {
     @Test
     public void testGenerateInsertScript() {
         final List<String> queryList = new GremlinScriptLiteralEdge().generateInsertScript(gremlinSource);
-        assertEquals(queryList.get(0), "g.V('123').addE('label-relationship').to(g.V('321'))" +
-                ".property(id, '456').property('name', 'rel-name').property('location', 'null')");
+        assertEquals(queryList.get(0), "g.V('123').as('from').V('321').as('to')"
+                + ".addE('label-relationship').from('from').to('to')"
+                + ".property(id, '456').property('name', 'rel-name').property('location', 'china')");
     }
 
     @Test
     public void testGenerateUpdateScript() {
         final List<String> queryList = new GremlinScriptLiteralEdge().generateUpdateScript(gremlinSource);
-        assertEquals(queryList.get(0), "g.E('456').property('name', 'rel-name').property('location', 'null')");
+        assertEquals(queryList.get(0), "g.E('456').property('name', 'rel-name').property('location', 'china')");
     }
 
     @Test
@@ -98,5 +101,15 @@ public class GremlinScriptLiteralEdgeUnitTest {
     public void testGenerateDeleteAllByClassScript() {
         final List<String> queryList = new GremlinScriptLiteralEdge().generateDeleteAllByClassScript(gremlinSource);
         assertEquals(queryList.get(0), "g.E().has(label, 'label-relationship').drop()");
+    }
+
+    @Test(expected = GremlinUnexpectedSourceTypeException.class)
+    public void testInvalidDeleteAllByClassScript() {
+        new GremlinScriptLiteralEdge().generateDeleteAllByClassScript(new GremlinSourceVertex());
+    }
+
+    @Test(expected = GremlinUnexpectedSourceTypeException.class)
+    public void testInvalidFindAllScript() {
+        new GremlinScriptLiteralEdge().generateFindAllScript(new GremlinSourceVertex());
     }
 }
