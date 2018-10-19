@@ -11,6 +11,7 @@ import com.microsoft.spring.data.gremlin.conversion.source.GremlinSourceVertex;
 import com.microsoft.spring.data.gremlin.exception.GremlinUnexpectedSourceTypeException;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
+import org.springframework.util.Assert;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -20,11 +21,11 @@ import java.util.List;
 import static com.microsoft.spring.data.gremlin.common.Constants.*;
 import static com.microsoft.spring.data.gremlin.common.GremlinEntityType.VERTEX;
 
-
 @NoArgsConstructor
 public class GremlinScriptLiteralVertex extends AbstractGremlinScriptLiteral implements GremlinScriptLiteral {
 
     @Override
+    @SuppressWarnings("unchecked")
     public List<String> generateInsertScript(@NonNull GremlinSource source) {
         if (!(source instanceof GremlinSourceVertex)) {
             throw new GremlinUnexpectedSourceTypeException("should be the instance of GremlinSourceVertex");
@@ -34,7 +35,9 @@ public class GremlinScriptLiteralVertex extends AbstractGremlinScriptLiteral imp
 
         scriptList.add(GREMLIN_PRIMITIVE_GRAPH);                               // g
         scriptList.add(generateAddEntityWithLabel(source.getLabel(), VERTEX)); // addV('label')
-        scriptList.add(generatePropertyWithRequiredId(source.getId()));        // property(id, xxx)
+        if (source.getId() != null) {
+             scriptList.add(generatePropertyWithRequiredId(source.getId()));   // property(id, xxx)
+        }
 
         scriptList.addAll(generateProperties(source.getProperties()));
 
@@ -42,11 +45,7 @@ public class GremlinScriptLiteralVertex extends AbstractGremlinScriptLiteral imp
     }
 
     @Override
-    public List<String> generateDeleteAllScript(@NonNull GremlinSource source) {
-        if (!(source instanceof GremlinSourceVertex)) {
-            throw new GremlinUnexpectedSourceTypeException("should be the instance of GremlinSourceVertex");
-        }
-
+    public List<String> generateDeleteAllScript() {
         return Collections.singletonList(Constants.GREMLIN_SCRIPT_VERTEX_DROP_ALL);
     }
 
@@ -81,6 +80,7 @@ public class GremlinScriptLiteralVertex extends AbstractGremlinScriptLiteral imp
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public List<String> generateUpdateScript(@NonNull GremlinSource source) {
         if (!(source instanceof GremlinSourceVertex)) {
             throw new GremlinUnexpectedSourceTypeException("should be the instance of GremlinSourceVertex");
@@ -102,10 +102,14 @@ public class GremlinScriptLiteralVertex extends AbstractGremlinScriptLiteral imp
             throw new GremlinUnexpectedSourceTypeException("should be the instance of GremlinSourceVertex");
         }
 
+        final String classname = source.getProperties().get(GREMLIN_PROPERTY_CLASSNAME).toString();
+        Assert.notNull(classname, "GremlinSource should contain predefined classname");
+
         final List<String> scriptList = Arrays.asList(
-                GREMLIN_PRIMITIVE_GRAPH,            // g
-                GREMLIN_PRIMITIVE_VERTEX_ALL,       // V()
-                generateHasLabel(source.getLabel()) // has(label, 'label')
+                GREMLIN_PRIMITIVE_GRAPH,                           // g
+                GREMLIN_PRIMITIVE_VERTEX_ALL,                      // V()
+                generateHasLabel(source.getLabel()),               // has(label, 'label')
+                generateHas(GREMLIN_PROPERTY_CLASSNAME, classname) // has(_classname, 'xxxxxx')
         );
 
         return completeScript(scriptList);

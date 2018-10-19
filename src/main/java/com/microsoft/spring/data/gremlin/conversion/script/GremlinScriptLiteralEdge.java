@@ -11,7 +11,7 @@ import com.microsoft.spring.data.gremlin.conversion.source.GremlinSourceEdge;
 import com.microsoft.spring.data.gremlin.exception.GremlinUnexpectedSourceTypeException;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
-import org.springframework.lang.Nullable;
+import org.springframework.util.Assert;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -33,6 +33,7 @@ public class GremlinScriptLiteralEdge extends AbstractGremlinScriptLiteral imple
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public List<String> generateInsertScript(@NonNull GremlinSource source) {
         if (!(source instanceof GremlinSourceEdge)) {
             throw new GremlinUnexpectedSourceTypeException("should be the instance of GremlinSourceEdge");
@@ -48,7 +49,9 @@ public class GremlinScriptLiteralEdge extends AbstractGremlinScriptLiteral imple
         scriptList.add(generateAsWithAlias(TO_ALIAS));                                      // to('to')
         scriptList.add(generateAddEntityWithLabel(sourceEdge.getLabel(), EDGE));            // addE(label)
         scriptList.add(generateEdgeDirection(FROM_ALIAS, TO_ALIAS));                        // from('from').to('to')
-        scriptList.add(generatePropertyWithRequiredId(source.getId()));                     // property(id, xxx)
+        if (source.getId() != null) {
+              scriptList.add(generatePropertyWithRequiredId(source.getId()));               // property(id, xxx)
+        }
 
         scriptList.addAll(generateProperties(source.getProperties()));
 
@@ -56,11 +59,7 @@ public class GremlinScriptLiteralEdge extends AbstractGremlinScriptLiteral imple
     }
 
     @Override
-    public List<String> generateDeleteAllScript(@Nullable GremlinSource source) {
-        if (!(source instanceof GremlinSourceEdge)) {
-            throw new GremlinUnexpectedSourceTypeException("should be the instance of GremlinSourceEdge");
-        }
-
+    public List<String> generateDeleteAllScript() {
         return Collections.singletonList(Constants.GREMLIN_SCRIPT_EDGE_DROP_ALL);
     }
 
@@ -95,6 +94,7 @@ public class GremlinScriptLiteralEdge extends AbstractGremlinScriptLiteral imple
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public List<String> generateUpdateScript(@NonNull GremlinSource source) {
         if (!(source instanceof GremlinSourceEdge)) {
             throw new GremlinUnexpectedSourceTypeException("should be the instance of GremlinSourceEdge");
@@ -116,10 +116,14 @@ public class GremlinScriptLiteralEdge extends AbstractGremlinScriptLiteral imple
             throw new GremlinUnexpectedSourceTypeException("should be the instance of GremlinSourceEdge");
         }
 
+        final String classname = source.getProperties().get(GREMLIN_PROPERTY_CLASSNAME).toString();
+        Assert.notNull(classname, "GremlinSource should contain predefined classname");
+
         final List<String> scriptList = Arrays.asList(
-                GREMLIN_PRIMITIVE_GRAPH,            // g
-                GREMLIN_PRIMITIVE_EDGE_ALL,         // E()
-                generateHasLabel(source.getLabel()) // has(label, 'label')
+                GREMLIN_PRIMITIVE_GRAPH,                           // g
+                GREMLIN_PRIMITIVE_EDGE_ALL,                        // E()
+                generateHasLabel(source.getLabel()),               // has(label, 'label')
+                generateHas(GREMLIN_PROPERTY_CLASSNAME, classname) // has(_classname, 'xxxxxx')
         );
 
         return completeScript(scriptList);

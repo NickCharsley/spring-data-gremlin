@@ -5,9 +5,18 @@
  */
 package com.microsoft.spring.data.gremlin.common;
 
-import com.microsoft.spring.data.gremlin.exception.GremlinInvalidEntityIdFieldException;
-import lombok.AccessLevel;
-import lombok.NoArgsConstructor;
+import static com.microsoft.spring.data.gremlin.common.Constants.GREMLIN_QUERY_BARRIER;
+
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Date;
+import java.util.List;
+
 import org.apache.commons.lang3.reflect.FieldUtils;
 import org.apache.tinkerpop.shaded.jackson.databind.MapperFeature;
 import org.apache.tinkerpop.shaded.jackson.databind.ObjectMapper;
@@ -15,9 +24,17 @@ import org.springframework.data.annotation.Id;
 import org.springframework.lang.NonNull;
 import org.springframework.util.ReflectionUtils;
 
-import java.lang.reflect.Field;
-import java.util.Date;
-import java.util.List;
+import com.microsoft.spring.data.gremlin.annotation.EdgeSet;
+import com.microsoft.spring.data.gremlin.annotation.GeneratedValue;
+import com.microsoft.spring.data.gremlin.annotation.VertexSet;
+import com.microsoft.spring.data.gremlin.conversion.source.GremlinSource;
+import com.microsoft.spring.data.gremlin.exception.GremlinEntityInformationException;
+import com.microsoft.spring.data.gremlin.exception.GremlinIllegalConfigurationException;
+import com.microsoft.spring.data.gremlin.exception.GremlinInvalidEntityIdFieldException;
+import com.microsoft.spring.data.gremlin.repository.support.GremlinEntityInformation;
+
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class GremlinUtils {
@@ -48,12 +65,19 @@ public class GremlinUtils {
 
     public static <T> Field getIdField(@NonNull Class<T> domainClass) {
         final Field idField;
-        final List<Field> fields = FieldUtils.getFieldsListWithAnnotation(domainClass, Id.class);
+        final List<Field> idFields = FieldUtils.getFieldsListWithAnnotation(domainClass, Id.class);
+        final List<Field> generatedValueFields = 
+                FieldUtils.getFieldsListWithAnnotation(domainClass, GeneratedValue.class);
 
-        if (fields.isEmpty()) {
+        if (generatedValueFields.size() > 1) {
+            throw new GremlinIllegalConfigurationException("Only one field, the id field, can have the optional "
+                    + "@GeneratedValue annotation!");
+        }
+
+        if (idFields.isEmpty()) {
             idField = ReflectionUtils.findField(domainClass, Constants.PROPERTY_ID);
-        } else if (fields.size() == 1) {
-            idField = fields.get(0);
+        } else if (idFields.size() == 1) {
+            idField = idFields.get(0);
         } else {
             throw new GremlinInvalidEntityIdFieldException("only one @Id field is allowed");
         }
@@ -63,6 +87,11 @@ public class GremlinUtils {
         } else if (idField.getType() != String.class
                 && idField.getType() != Long.class && idField.getType() != Integer.class) {
             throw new GremlinInvalidEntityIdFieldException("the type of @Id/id field should be String/Integer/Long");
+        }
+
+        if (generatedValueFields.size() == 1 && !generatedValueFields.get(0).equals(idField)) {
+            throw new GremlinIllegalConfigurationException("Only the id field can have the optional "
+                    + "@GeneratedValue annotation!");
         }
 
         return idField;
@@ -86,5 +115,27 @@ public class GremlinUtils {
         } else {
             throw new UnsupportedOperationException("Unsupported object type to long");
         }
+    }
+
+    public static <T> GremlinSource<T> toGremlinSource(@NonNull Class<T> domainClass) {
+        return new GremlinEntityInformation<>(domainClass).createGremlinSource();
+    }
+
+    public static List<List<String>> toParallelQueryList(@NonNull List<String> queries) {
+        final List<List<String>> parallelQueries = new ArrayList<>();
+        List<String> parallelQuery = new ArrayList<>();
+
+        for (final String query : queries) {
+            if (query.equals(GREMLIN_QUERY_BARRIER)) {
+                parallelQueries.add(parallelQuery);
+                parallelQuery = new ArrayList<>();
+            } else {
+                parallelQuery.add(query);
+            }
+        }
+
+        parallelQueries.add(parallelQuery);
+
+        return parallelQueries;
     }
 }
